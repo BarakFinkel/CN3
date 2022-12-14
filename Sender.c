@@ -30,8 +30,8 @@ int main()
     int ret = setsockopt(listenSock, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(int)); //* socket, otherwise does nothing.
     if (ret < 0)
     {
-        printf("setsockopt() failed, error : %d", errno);      //* If the socket's reuse failed,
-        return 0;                                              //* print the error and exit main.
+        printf("setsockopt() failed, error : %d", errno);      // If the socket's reuse failed,
+        return 0;                                              // print the error and exit main.
     }
 
     struct sockaddr_in server_address;                  // Using the imported struct of a socket address using the IPv4 module.
@@ -44,8 +44,8 @@ int main()
     int binded = bind(listenSock, (struct sockaddr *)&server_address, sizeof(server_address)); // Bind the socket to a port and IP.
     if (binded == -1)
     {
-        printf("Binding failed, error : %d", errno); //* If the binding failed,
-        close(listenSock);                           //* print the corresponding error, close the socket and exit main.
+        printf("Binding failed, error : %d", errno); // If the binding failed,
+        close(listenSock);                           // print the corresponding error, close the socket and exit main.
         return -1;
     }
 
@@ -54,8 +54,8 @@ int main()
     int listenResult = listen(listenSock, 3); // Start listening, and set the max queue for awaiting client to 3.
     if (listenResult == -1)
     {
-        printf("Listening failed, error : %d", errno); //* If listen failed,
-        close(listenSock);                             //* print the corresponding error, close the socket and exit main.
+        printf("Listening failed, error : %d", errno); // If listen failed,
+        close(listenSock);                             // print the corresponding error, close the socket and exit main.
         return -1;
     }
 
@@ -93,6 +93,8 @@ int main()
 
         // Setting the congestion control algorithm to reno:
 
+        while(1){
+
         if(setsockopt(listenSock, IPPROTO_TCP, TCP_CONGESTION, "reno", 6) < 0)         
         {
             printf("Error : Failed to set congestion control algorithm to reno.");    // If the setting of the congestion control algorithm failed, print an error and exit main.
@@ -122,9 +124,9 @@ int main()
 
         int keyRequest = getKey(clientSock, listenSock, clientKey);       // Receiving the key from the client.
         
-        if( (strcmp(serverKey, clientKey)) != 0 )                         // Comparing the server and client's keys.
+        if( (strcmp(serverKey, clientKey)) != 0 )   // Comparing the server and client's keys.
         {
-            printf("Error : Keys don't match.");
+            printf("Error : Keys don't match.");    // If the keys don't match, print an error and exit main.
             close(clientSock);
             close(listenSock);
             return -1;
@@ -141,8 +143,8 @@ int main()
         
         if(setsockopt(listenSock, IPPROTO_TCP, TCP_CONGESTION, "cubic", 6) < 0)        
         {
-            printf("Error : Failed to set congestion control algorithm to cubic.");    // If the setting of the congestion control algorithm failed, print an error and exit main.
-            close(clientSock);
+            printf("Error : Failed to set congestion control algorithm to cubic.");    // If the setting of the congestion control algorithm failed, 
+            close(clientSock);                                                         // print an error, close the sockets and exit main.
             close(listenSock);
             return -1;
         }
@@ -151,10 +153,10 @@ int main()
 
         counter = sendFile(fp, clientSock, listenSock, size/2, counter, buffer);       // Sending the 2nd part of the file.
 
-        if(counter != size)                                                            // If the sending of the file failed, print an error and exit main.
-        {
-            printf("Error : File sent is corrupted.");
-            close(clientSock);
+        if(counter != size)                                                            
+        {                                                                              
+            printf("Error : File sent is corrupted.");                                 // If the sending of the file failed,
+            close(clientSock);                                                         // print an error, close the sockets and exit main.
             close(listenSock);
             return -1;
         }
@@ -165,9 +167,9 @@ int main()
 
         int fin = sendFIN(clientSock, listenSock, buffer);             // Sending the fin packet.
         
-        if(fin == -1)                                                  // If the sending of the fin packet failed, print an error and exit main.
+        if(fin == -1)                                                  
         {
-            printf("Error : Failed to send fin packet.");
+            printf("Error : Failed to send fin packet.");              // If the sending of the fin packet failed, print an error and exit main.
             close(clientSock);
             close(listenSock);
             return -1;
@@ -191,6 +193,10 @@ int main()
 
         // ***Note to myself***: I should put everything in a loop, so that the sender can send the file again if he wants to.
 
+        }
+
+
+
         // Finishing up:
 
         fclose(fp);            // Closing the file.
@@ -201,7 +207,11 @@ int main()
     return 0;
 }
 
+
+
 //_____function sendFIN: This function lets the client know that the server finished sending the file, and gets the client's ACK in return_____//
+
+
 
 int sendFIN(int clientSock, int listenSock, int *buffer)
 {
@@ -263,7 +273,11 @@ int sendFIN(int clientSock, int listenSock, int *buffer)
     return 0;
 }
 
+
+
 //_____getKey function: asks the client for a key and receives it_____// 
+
+
 
 int getKey(int clientSock, int listenSock, int clientKey[10])
 {
@@ -324,7 +338,11 @@ int getKey(int clientSock, int listenSock, int clientKey[10])
     return 0;
 }
 
+
+
 //_____sendFile function: sending the file to the client and receiving an ACK from the client_____//
+
+
 
 int sendFile(FILE *fp, int clientSock, int listenSock, int size, int counter, char buffer[buffer_size]) 
 {
@@ -408,6 +426,8 @@ int sendFile(FILE *fp, int clientSock, int listenSock, int size, int counter, ch
     return counter;
 }
 
+//_____file_size function: returns the size of the file_____//
+
 int file_size(FILE *fp)
 {
     int size;
@@ -417,6 +437,8 @@ int file_size(FILE *fp)
 
     return size;
 }
+
+//_____min function: returns the minimum of two numbers_____//
 
 int min(int a, int b)
 {
