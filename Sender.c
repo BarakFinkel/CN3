@@ -13,12 +13,15 @@
 #define server_port 5060 // The port that the server listens
 #define buffer_size 1024 // The size of the file we want to send.
 
-int sendFIN(int clientSock, int listenSock, char *buffer);                                                // line 219
-int getKey(int clientSock, int listenSock, char *clientKey, char *serverKey);                             // line 283
-int sendFile(FILE *fp, int clientSock, int listenSock, int size, int counter, char buffer[buffer_size]);  // line 346
-int sendEND(int clientSock, int listenSock, char *buffer);
-int file_size(FILE *fp);                                                                                  // line 422
-int min(int a, int b);                                                                                    // line 436
+// **FUNCTION HEADERS**:
+
+int sendFIN(int clientSock, char *buffer);      
+int sendFileSize(int clientSock, char *buffer, int size);                                         
+int getKey(int clientSock, char *clientKey, char *serverKey);                             
+int sendFile(FILE *fp, int clientSock, int size, int counter, char buffer[buffer_size]);  
+int sendEND(int clientSock, char *buffer);
+int file_size(FILE *fp);                                                                                  
+int min(int a, int b);                                                                                  
 
 int main()
 {
@@ -36,7 +39,7 @@ int main()
     }
 
     int reuse = 1;                                                                   
-    int temp = setsockopt(listenSock, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(int)); // uses a previously chosen socketopt if there is one.
+    temp = setsockopt(listenSock, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(int)); // uses a previously chosen socketopt if there is one.
     if (temp < 0)
     {
         printf("Error : Failed to set congestion control algorithm to reno.\n");      // If the socket's reuse failed,
@@ -53,17 +56,15 @@ int main()
     temp = bind(listenSock, (struct sockaddr *)&server_address, sizeof(server_address)); // Bind the socket to a port and IP.
     if (temp == -1)
     {
-        printf("Error: Binding failed.");  // If the binding failed,
+        printf("Error: Binding failed.\n");  // If the binding failed,
         close(listenSock);                              // print the corresponding error, close the socket and exit main.
         return -1;
     }
 
-    printf("Binding complete!\n");
-
     temp = listen(listenSock, 3);            // Start listening, and set the max queue for awaiting client to 3.
     if (temp == -1)
     {
-        printf("Listening failed, error : %d\n", errno); // If listen failed,
+        printf("Error: Listening failed.");              // If listen failed,
         close(listenSock);                               // print the corresponding error, close the socket and exit main.
         return -1;
     }
@@ -89,7 +90,7 @@ int main()
 
         printf("Connected to client!\n");
 
-        FILE *fp = fopen("test.txt", "r");     // Opening the file to send.
+        FILE *fp = fopen("send.txt", "r");     // Opening the file to send.
         if (fp == NULL)
         {
             printf("File open error\n");       // If the file failed to open, 
@@ -105,7 +106,7 @@ int main()
         char clientKey[10] = {0};              // Setting the client key buffer.
         char serverKey[10] = {0};              // Setting the server key buffer to the size of the key.
         int key = 1714 ^ 6521;                 // Calculating the key.
-        sprintf(serverKey, "%d", key);         // Converting the key to a string and storing it in the keyBuffer.
+        sprintf(serverKey, "%d", key);         // Storing the key in the server key buffer.
 
         char message[1] = {0};                 // Setting the message buffer responsible for checking if the server wants to send the file again.
 
@@ -121,9 +122,13 @@ int main()
                 return -1;
             }
 
+            printf("CC algorithm set to reno.\n");
+
             // Sending the size of the file:
 
-            temp = sendFileSize(clientSock, listenSock, buffer, size);                    
+            printf("Sending size of the file...\n");
+
+            temp = sendFileSize(clientSock, buffer, size);                    
             if(temp == -1)                                                                                 
             {
                 close(clientSock);               // If the sending of the size failed, 
@@ -131,14 +136,15 @@ int main()
                 return -1;
             }
 
+            printf("Size of the file sent successfully!\n");
 
             // Sending the 1st part of the file:
 
             printf("Sending first part of the file...\n");
 
-            counter = sendFile(fp, clientSock, listenSock, size/2, counter, buffer);            
+            counter = sendFile(fp, clientSock, size/2, counter, buffer);            
 
-            if(counter != size/2)              
+            if(counter == -1)              
             {
                 close(clientSock);               // If the sending of the first part of the file failed,
                 close(listenSock);               // close the sockets and exit main.
@@ -152,7 +158,7 @@ int main()
 
             printf("Asking client for key...\n");
 
-            temp = getKey(clientSock, listenSock, clientKey, serverKey);          
+            temp = getKey(clientSock, clientKey, serverKey);          
             
             if(temp == -1)                                                       
             {
@@ -162,8 +168,6 @@ int main()
             }
 
             printf("Keys match!\n");
-
-            printf("First part of the file sent successfully!\n");
 
             // Setting the congestion control algorithm to cubic:
             
@@ -175,17 +179,20 @@ int main()
                 return -1;                                                                 
             }
 
+            printf("CC algorithm set to cubic.\n");
+
             // Sending the 2nd part of the file:
 
             printf("Sending second part of the file...\n");
 
-            counter = sendFile(fp, clientSock, listenSock, size/2, counter, buffer);       // Sending the 2nd part of the file.
+            printf("counter = %d\n", counter);
 
-            if(counter != size)                                                            
-            {                                                                              
-                printf("Error : File sent is corrupted.");                                 // If the sending of the file failed,
-                close(clientSock);                                                         // close the sockets and exit main.
-                close(listenSock);
+            counter = sendFile(fp, clientSock, size/2, counter, buffer);       // Sending the 2nd part of the file.
+            
+            if(counter != size)                                              
+            {
+                close(clientSock);               // If the sending of the second part of the file failed, 
+                close(listenSock);               // close the sockets and exit main.
                 return -1;
             }
 
@@ -195,7 +202,7 @@ int main()
 
             printf("Letting the client know we finished sending the file...\n");
 
-            temp = sendFIN(clientSock, listenSock, buffer);  
+            temp = sendFIN(clientSock, buffer);  
             
             if(temp == -1)                                                  
             {
@@ -228,7 +235,7 @@ int main()
 
         printf("Asking the client to close connection...\n");
 
-        temp = sendEND(clientSock, listenSock, buffer);                // Asking the client to close the connection.
+        temp = sendEND(clientSock, buffer);                // Asking the client to close the connection.
 
         if(temp == -1)
         {
@@ -236,6 +243,8 @@ int main()
             close(listenSock);                                            // If the sending of the end packet failed, exit main.
             return -1;                                                    
         }
+
+
 
         printf("Client closed the connection!\n");
 
@@ -253,9 +262,9 @@ int main()
 // **THE FUNCTIONS** :
 
 
-// sendFIN(): lets the client know that the server finished sending the file, and gets the client's ACK in return
+// sendFIN(): lets the client know that the server finished sending the file, and gets the client's ACK in return.
 
-int sendFIN(int clientSock, int listenSock, char *buffer)
+int sendFIN(int clientSock, char *buffer)
 {
     int sendRequest = send(clientSock, "FIN", 4, 0);   // Sending the buffer to the client.
 
@@ -279,7 +288,7 @@ int sendFIN(int clientSock, int listenSock, char *buffer)
 
     // If the program reaches here, then the FIN was sent successfully.
 
-    //_____Receiving the client's FINACK:_____//
+    //_____Receiving the client's ACK:_____//
 
     int recvResult = recv(clientSock, buffer, 4, 0); // Receiving the client's response.
 
@@ -309,14 +318,14 @@ int sendFIN(int clientSock, int listenSock, char *buffer)
 }
 
 
-// sendFileSize() This function sends the client the size of the file he's about to receive, and gets the client's ACK in return//
+// sendFileSize() This function sends the client the size of the file he's about to receive, and gets the client's ACK in return.
 
-int sendFileSize(int clientSock, int listenSock, char *buffer, int size)
+int sendFileSize(int clientSock, char *buffer, int size)
 {
     sprintf(buffer, "%d", size);   // Converting the size of the file to a string and saving it in the buffer.
 
-    int sendSize = send(clientSock, strlen(buffer) + 1, 1, 0);   // Sending the buffer to the client.
-    
+    int sendSize = send(clientSock, buffer, strlen(buffer) + 1, 0);   // Sending the buffer to the client.
+
     if (sendSize == -1)
     {
         printf("Error : Sending dropped.\n");    // If the send failed, print an error and exit main.
@@ -329,7 +338,7 @@ int sendFileSize(int clientSock, int listenSock, char *buffer, int size)
         return -1;
     }
 
-    else if (sendSize != 1)   // Checking if the bytes send and the bytes received are equal.
+    else if (sendSize != strlen(buffer) + 1)   // Checking if the bytes send and the bytes received are equal.
     {
         printf("Error : Server sent a corrupted buffer.\n");   // If they aren't, print an error and exit main.
         return -1;
@@ -337,7 +346,7 @@ int sendFileSize(int clientSock, int listenSock, char *buffer, int size)
 
     // If the program reaches here, then the file size was sent successfully.
 
-    bzero(buffer, strlen(buffer) + 1);               // Resetting the buffer to default values.
+    bzero(buffer, (int)(strlen(buffer) + 1));               // Resetting the buffer to default values.
 
     //_____Receiving the client's ACK:_____//
 
@@ -360,29 +369,31 @@ int sendFileSize(int clientSock, int listenSock, char *buffer, int size)
         printf("Error : Server received a corrupted buffer.\n");   // If they aren't, print an error and exit main.
         return -1;
     }
+
+    bzero(buffer, 4);   // Resetting the buffer to default values.
 }
 
 
 // getKey() asks the client for a key and receives it// 
 
-int getKey(int clientSock, int listenSock, char *clientKey, char *serverKey)
+int getKey(int clientSock, char *clientKey, char *serverKey)
 {
     int sendRequest = send(clientSock, "SEND KEY", 9, 0);   // Sending the buffer to the client.
 
     if (sendRequest == -1)
     {
-        printf("Error : Sending dropped.");    // If the send failed, print an error and exit main.
+        printf("Error : Sending faied.\n");    // If the send failed, print an error and exit main.
         return -1;
     }
 
     else if (sendRequest == 0)
     {
-        printf("Error : Client's socket is closed, couldn't send to it.");    // If the send failed, print an error and exit main.
+        printf("Error : Client's socket is closed, couldn't send to it.\n");    // If the send failed, print an error and exit main.
         return -1;
     }
-    else if (sendRequest != 10)
+    else if (sendRequest != 9)
     {
-        printf("Error : Client received a corrupted buffer.");     // If the send failed, print an error and exit main.
+        printf("Error : Client received a corrupted buffer.\n");     // If the send failed, print an error and exit main.
         return -1;
     }
 
@@ -390,29 +401,29 @@ int getKey(int clientSock, int listenSock, char *clientKey, char *serverKey)
 
     // Receiving the client's key:
 
-    int recvKey = recv(clientSock, clientKey, 10, 0); // Receiving the client's response.
+    int recvKey = recv(clientSock, clientKey, 5, 0); // Receiving the client's response.
 
     if (recvKey < 0) 
     {
-        printf("Error : Receiving failed.");   // If the receive failed, print an error and exit main.
+        printf("Error : Receiving failed.\n");   // If the receive failed, print an error and exit main.
         return -1;
     }
             
     else if (recvKey == 0) 
     {
-        printf("Error : Client's socket is closed, nothing to receive."); // If the receive failed, print an error and exit main.
+        printf("Error : Client's socket is closed, nothing to receive.\n"); // If the receive failed, print an error and exit main.
         return -1;
     }
 
-    else if (recvKey != 10)   // Checking if the bytes send and the bytes received are equal.
+    else if (recvKey != 5)   // Checking if the bytes send and the bytes received are equal.
     {
-        printf("Error : Server received a corrupted buffer.");   // If they aren't, print an error and exit main.
+        printf("Error : Server received a corrupted buffer.\n");   // If they aren't, print an error and exit main.
         return -1;
     }
 
     else if( (strcmp(serverKey, clientKey)) != 0 )   // Comparing the server and client's keys.
     {
-        printf("Error : Keys don't match.");    // If the keys don't match, print an error and exit main.
+        printf("Error : Keys don't match.\n");    // If the keys don't match, print an error and exit main.
         return -1;
     }
 
@@ -422,18 +433,18 @@ int getKey(int clientSock, int listenSock, char *clientKey, char *serverKey)
 
     if (sendOK == -1)
     {
-        printf("Error : Sending dropped.");    // If the send failed, print an error and exit main.
+        printf("Error : Sending failed.\n");    // If the send failed, print an error and exit main.
         return -1;
     }
 
     else if (sendOK == 0)
     {
-        printf("Error : Client's socket is closed, couldn't send to it.");    // If the send failed, print an error and exit main.
+        printf("Error : Client's socket is closed, couldn't send to it.\n");    // If the send failed, print an error and exit main.
         return -1;
     }
     else if (sendOK != 3)
     {
-        printf("Error : Client received a corrupted buffer.");     // If the send failed, print an error and exit main.
+        printf("Error : Client received a corrupted buffer.\n");     // If the send failed, print an error and exit main.
         return -1;
     }
 
@@ -446,32 +457,32 @@ int getKey(int clientSock, int listenSock, char *clientKey, char *serverKey)
 
 //_____sendFile function: sending the file to the client and receiving an ACK from the client_____//
 
-int sendFile(FILE *fp, int clientSock, int listenSock, int size, int counter, char buffer[buffer_size]) 
+int sendFile(FILE *fp, int clientSock, int size, int counter, char buffer[buffer_size]) 
 {
     int numofbytes = min(buffer_size, size - counter); // Getting the minimum of the buffer size and the remaining bytes to send.
         
-    while (counter < size && fread(buffer, numofbytes, 1, fp) != NULL)
+    while ( counter < size && fread(buffer, numofbytes, 1, fp) != 0 )
     {
-            
+
         //_____Sending the buffer to the client:_____//
 
         int sendResult = send(clientSock, buffer, numofbytes, 0);   // Sending the buffer to the client.
 
         if (sendResult == -1)
         {
-            printf("Error : Sending dropped.");    // If the send failed, print an error and exit main.
+            printf("Error : Sending failed.\n");    // If the send failed, print an error and exit main.
             return -1;
         }
 
         else if (sendResult == 0)
         {
-            printf("Error : Client's socket is closed, couldn't send to it.");    // If the send failed, print an error and exit main.
+            printf("Error : Client's socket is closed, couldn't send to it.\n");    // If the send failed, print an error and exit main.
             return -1;
         }
 
         else if (sendResult != numofbytes)
         {
-            printf("Error : Client received a corrupted buffer.");     // If the send failed, print an error and exit main.
+            printf("Error : Client received a corrupted buffer.\n");     // If the send failed, print an error and exit main.
             return -1;
         }
 
@@ -481,31 +492,32 @@ int sendFile(FILE *fp, int clientSock, int listenSock, int size, int counter, ch
 
         //_____Receiving the client's ACK:_____//
 
-        int recvResult = recv(clientSock, buffer, 1, 0); // Receiving the client's response.
+        int recvResult = recv(clientSock, buffer, 4, 0); // Receiving the client's response.
 
         if (recvResult < 0) 
         {
-            printf("Error : Receiving failed.");   // If the receive failed, print an error and exit main.
+            printf("Error : Receiving failed.\n");   // If the receive failed, print an error and exit main.
             return -1;
         }
             
         else if (recvResult == 0) 
         {
-            printf("Error : Client's socket is closed, nothing to receive."); // If the receive failed, print an error and exit main.
+            printf("Error : Client's socket is closed, nothing to receive.\n"); // If the receive failed, print an error and exit main.
             return -1;
         }
 
         else if (strcmp(buffer, "ACK") != 0)   // Checking if the bytes send and the bytes received are equal.
         {
-            printf("Error : Server received a corrupted buffer.");   // If they aren't, print an error and exit main.
+            printf("Error : Server received a corrupted buffer.\n");   // If they aren't, print an error and exit main.
             return -1;
         }
 
         // if the program reaches here, the 'i' ACK was sent successfully.
 
-        bzero(buffer, 1);          // Resetting the buffer.
+        bzero(buffer, 4);          // Resetting the buffer.
 
         counter += numofbytes;     // Adding the number of bytes sent to the counter.
+
     }
 
     return counter;
@@ -514,81 +526,129 @@ int sendFile(FILE *fp, int clientSock, int listenSock, int size, int counter, ch
 
 //_____sendEnd function: sending the client that the server wants to end the connection_____//
 
-int sendEND(int clientSock, int listenSock, char *buffer){
+int sendEND(int clientSock, char *buffer)
+{
+
+    // Sending the client a request to end the connection:
 
     int sendRequest = send(clientSock, "END", 4, 0);   // Sending END message to the client.
 
     if (sendRequest == -1)
     {
-        printf("Error : Sending dropped.");            // If the send failed, print an error and exit main.
+        printf("Error : Sending failed.\n");            // If the send failed, print an error and exit main.
         return -1;
     }
 
     else if (sendRequest == 0)
     {
-        printf("Error : Client's socket is closed, couldn't send to it.");    // If the send failed, print an error and exit main.
+        printf("Error : Client's socket is closed, couldn't send to it.\n");    // If the send failed, print an error and exit main.
         return -1;
     }
 
     else if (sendRequest != 4)
     {
-        printf("Error : Client received a corrupted buffer.");     // If the send failed, print an error and exit main.
+        printf("Error : Client received a corrupted buffer.\n");     // If the send failed, print an error and exit main.
         return -1;
     }
 
-    // If the program reaches here, then END message was sent to the client.
 
-    //_____Receiving the client's ENDACK:_____//
+    // Receiving the client's ACK for closing the connection:
 
     int recvResult = recv(clientSock, buffer, 4, 0); // Receiving the client's response.
 
     if (recvResult < 0) 
     {
-        printf("Error : Receiving failed.");         // If the receiving failed, print an error and exit main.
+        printf("Error : Receiving failed.\n");         // If the receiving failed, print an error and exit main.
         return -1;
     }
     
     else if (recvResult == 0) 
     {
-        printf("Error : Client's socket is closed, nothing to receive.");   // If the receiving failed, print an error and exit main.
+        printf("Error : Client's socket is closed, nothing to receive.\n");   // If the receiving failed, print an error and exit main.
         return -1;
     }
 
     else if (strcmp(buffer, "ACK") != 0)   // Checking if the bytes send and the bytes received are equal.
     {
-        printf("Error : Server received a corrupted buffer.");   // If they aren't, print an error and exit main.
+        printf("Error : Server received a corrupted buffer.\n");   // If they aren't, print an error and exit main.
+        return -1;
+    }
+    
+
+    bzero(buffer, (int)(strlen(buffer) + 1));       // Resetting the buffer to default values.
+
+
+    // Since both parties need to send an 'END' to end the connection, 
+    // The server will be receiving the client's request to end the connection:
+
+    recvResult = recv(clientSock, buffer, 4, 0);    // Receiving the client's request to end.
+
+    if(recvResult < 0)
+    {
+        printf("Error : Receiving failed.\n");         // If the receiving failed, print an error and exit main.
         return -1;
     }
 
-    // if the program reaches here, the END ACK was received successfully.
+    else if (recvResult == 0)
+    {
+        printf("Error : Client's socket is closed, nothing to receive.\n");   // If the receiving failed, print an error and exit main.
+        return -1;
+    }
 
-    bzero(buffer, strlen(buffer) + 1);   // Resetting the buffer to default values.
-    return 0;
+    else if (strcmp(buffer, "END") != 0)   // Checking if the bytes send and the bytes received are equal.
+    {
+        printf("Error : Server received a corrupted buffer.\n");   // If they aren't, print an error and exit main.
+        return -1;
+    }
 
-}
+    // Sending the client an ACK for closing the connection:
 
-
-//_____sendAGAIN function: sending the client that the server wants to send the file again the connection_____//
-
-int sendAGAIN(int clientSock, int listenSock, char *buffer){
-
-    int sendRequest = send(clientSock, "AGAIN", 6, 0);   // Sending END message to the client.
+    sendRequest = send(clientSock, "ACK", 4, 0);       // Sending ACK message to the client.
 
     if (sendRequest == -1)
     {
-        printf("Error : Sending dropped.");            // If the send failed, print an error and exit main.
+        printf("Error : Sending failed.\n");            // If the send failed, print an error and exit main.
         return -1;
     }
 
     else if (sendRequest == 0)
     {
-        printf("Error : Client's socket is closed, couldn't send to it.");    // If the send failed, print an error and exit main.
+        printf("Error : Client's socket is closed, couldn't send to it.\n");    // If the send failed, print an error and exit main.
         return -1;
     }
 
     else if (sendRequest != 4)
     {
-        printf("Error : Client received a corrupted buffer.");     // If the send failed, print an error and exit main.
+        printf("Error : Client received a corrupted buffer.\n");     // If the send failed, print an error and exit main.
+        return -1;
+    }
+
+    bzero(buffer, (int)(strlen(buffer) + 1));       // Resetting the buffer to default values.
+    return 0;
+}
+
+
+//_____sendAGAIN function: sending the client that the server wants to send the file again the connection_____//
+
+int sendAGAIN(int clientSock, char *buffer){
+
+    int sendRequest = send(clientSock, "AGAIN", 6, 0);   // Sending END message to the client.
+
+    if (sendRequest == -1)
+    {
+        printf("Error : Sending failed.\n");            // If the send failed, print an error and exit main.
+        return -1;
+    }
+
+    else if (sendRequest == 0)
+    {
+        printf("Error : Client's socket is closed, couldn't send to it.\n");    // If the send failed, print an error and exit main.
+        return -1;
+    }
+
+    else if (sendRequest != 4)
+    {
+        printf("Error : Client received a corrupted buffer.\n");     // If the send failed, print an error and exit main.
         return -1;
     }
 
@@ -600,19 +660,19 @@ int sendAGAIN(int clientSock, int listenSock, char *buffer){
 
     if (recvResult < 0) 
     {
-        printf("Error : Receiving failed.");         // If the receiving failed, print an error and exit main.
+        printf("Error : Receiving failed.\n");         // If the receiving failed, print an error and exit main.
         return -1;
     }
     
     else if (recvResult == 0) 
     {
-        printf("Error : Client's socket is closed, nothing to receive.");   // If the receiving failed, print an error and exit main.
+        printf("Error : Client's socket is closed, nothing to receive.\n");   // If the receiving failed, print an error and exit main.
         return -1;
     }
 
     else if (strcmp(buffer, "ACK"))   // Checking if the bytes send and the bytes received are equal.
     {
-        printf("Error : Server received a corrupted buffer.");   // If they aren't, print an error and exit main.
+        printf("Error : Server received a corrupted buffer.\n");   // If they aren't, print an error and exit main.
         return -1;
     }
 

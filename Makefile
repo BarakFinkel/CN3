@@ -15,4 +15,4 @@ Receiver.o: Receiver.c
 .PHONY: clean all
 
 clean:
-	rm -f *.o server client
+	rm -f *.o server client lotr.txt
