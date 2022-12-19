@@ -267,6 +267,9 @@ int main()
     }
 
     close(listenSock);
+
+    printf("\n");
+    
     return 0;
 }
 

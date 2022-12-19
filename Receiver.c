@@ -6,12 +6,15 @@
 #include <string.h>
 #include <sys/socket.h>
 #include <sys/types.h>
+#include <sys/time.h>
 #include <unistd.h>
 #include <netinet/tcp.h>
 
 #define server_port 5060
 #define server_ip "127.0.0.1"
 #define buffer_size 1024
+#define cc1 "reno"
+#define cc2 "cubic"
 
 // **Function Headers**:
 
@@ -82,10 +85,24 @@ int main() {
     printf("File size received successfully!\n");
 
 
+    // We now declare an array to store the time it took to receive each half of the file.
+    // The **even** indices will store the time it took to receive the first half (meaning in cc algorithm reno).
+    // The **odd** indices will store the time it took to receive the second half (meaning in cc algorithm cubic).
+
+    double time[buffer_size] = {0};    // An array to store the time it took to receive each half of the file.
+    struct timeval current_time;       // A struct to store the current time.
+    int current = 0;                   // The current index of the time array to fill in the next ammount of time for the file to be recieved.
+    double start = 0;                     // The start time of the file receiving.
+    double end = 0;                       // The end time of the file receiving.   
+    int flag = 1;                      // A flag used to help measure the time it took to receive a half of the file (usage better explained in the code below).
+
+
+
     while(1)
     {
+        // Initializing a pointer to the beginning of the file / creating a new file with the given name if it didn't exist beforehand.
 
-        FILE *fp = fopen("lotr.txt", "w"); 
+        FILE *fp = fopen("recv.txt", "w"); 
         if (fp == NULL) 
         {
             printf("Error : File opening failed.\n");
@@ -93,22 +110,62 @@ int main() {
             return -1;
         }
 
-        if(setsockopt(sock, IPPROTO_TCP, TCP_CONGESTION, "reno", 6) < 0)         
+        // Setting the congestion control algorithm to reno for the receival of the first half of the file.
+
+        if(setsockopt(sock, IPPROTO_TCP, TCP_CONGESTION, cc1, 6) < 0)         
         {
             printf("Error : Failed to set congestion control algorithm to reno.\n");    // If the setting of the congestion control algorithm failed, 
             close(sock);                                                                // print an error, close  and exit main.
             return -1;
         }        
 
-        printf("CC algorithm set to reno.\n");
+        printf("CC algorithm set to %s.\n", cc1);
 
         printf("Receiving the first part of the file...\n");
 
+
+        // We now start the loop for receiving chunks of the file or any predicted messages from the server.
+
         while(1)
         {
+            // Getting the current time and storing it in the variable 'start'.
+        
+            if(flag == 1)
+            {
+                gettimeofday(&current_time, NULL);                                   // Getting the current time.
+                start = current_time.tv_sec + (current_time.tv_usec / 1000000.0);    // Converting the current time to seconds.
+                flag == 0;
+            }
+
+            // Receiving up to 1024 bytes of data from the server.
 
             temp = recv(sock, buffer, buffer_size, 0);    // Receiving data from the server.
+
             
+            // If the counter + num of bytes we received equals to size/2 or size, we have received half of the size of the file.
+            
+            // * There are 2 reasons for writing this part of the code here:
+            //   1) We want to be as precise as possible for us about the time it took to receive the first half of the file.
+            //   2) If we had a problem with receiving the file at any point in the code, we will not show any results,
+            //      so it does not matter if we write this part of the code here. 
+
+            if ( (counter + temp == size/2 ) && strcmp(buffer, "SEND KEY") != 0)
+            {
+                gettimeofday(&current_time, NULL);                                 // Getting the current time.
+                end = current_time.tv_sec + (current_time.tv_usec / 1000000.0);    // Converting the current time to seconds.
+                time[current] = end - start;                                       // Storing the time it took to receive the first half of the file.
+                current++;                                                         // Incrementing the current index of the time array.
+                flag = 1;                                                          // Setting the flag to 1 to indicate that the next half of the file is being received.
+            }
+
+            if ( (counter + temp == size ) && strcmp(buffer, "FIN") != 0)
+            {     
+                gettimeofday(&current_time, NULL);                                 // Same actions as in the previous if statement.
+                end = current_time.tv_sec + (current_time.tv_usec / 1000000.0);    // Just about the second part of the file.
+                time[current] = end - start;                                      
+                current++;                                                         
+                flag = 1;                                                          
+            }
 
             // if temp == -1, then receiving failed with a general error.
 
@@ -130,7 +187,7 @@ int main() {
             }
 
 
-            // If the received data is "SEND KEY", then the server is sending a key:
+            // If the received data is "SEND KEY", we have received half of the file and the server asks us to send a key:
 
             else if (strcmp(buffer, "SEND KEY") == 0)
             {
@@ -151,14 +208,14 @@ int main() {
 
                 // If the counter is half the size of the file, change the congestion control algorithm to cubic to match the sender's algorithm:
 
-                if(setsockopt(sock, IPPROTO_TCP, TCP_CONGESTION, "cubic", 6) < 0)           
+                if(setsockopt(sock, IPPROTO_TCP, TCP_CONGESTION, cc2, 6) < 0)           
                 {                                                                         
                     printf("Error : Failed to set congestion control algorithm to cubic.\n");    // If the setting of the congestion control algorithm failed, 
                     close(sock);                                                                 // print an error and exit main.
                     return -1;
                 }     
 
-                printf("CC algorithm set to cubic.\n");
+                printf("CC algorithm set to %s.\n", cc2);
 
                 printf("Receiving the second part of the file...\n");
             }
@@ -184,7 +241,6 @@ int main() {
 
             else 
             {
-
                 chunkSize = temp;
 
                 temp = writeChunk(fp, sock, chunkSize, buffer, ACK);
@@ -249,7 +305,7 @@ int main() {
 
             fseek(fp, 0, SEEK_SET);           
             fclose(fp);                                 
-            int rmv = remove("lotr.txt");               
+            int rmv = remove("recv.txt");               
             counter = 0;
 
             if(rmv != 0)
@@ -302,6 +358,47 @@ int main() {
     close(sock);
     
     printf("Socket closed, goodbye!\n");
+
+    // Now we will print the time it took to receive each iteration of half of the file:
+
+    printf("\n");
+    printf("Time it took to receive each iteration of 1st half of the file (in %s cc protocol):\n", cc1);
+    printf("\n");
+
+    int ind = 1;
+    double evensum = 0;
+    int i;
+
+    for(i = 0; i < 10; i+=2)
+    {
+        printf("Iteration %d: %f seconds.\n", ind, time[i]);
+        evensum += time[i];
+        ind++;
+    }
+
+    double evenavg = evensum / (ind-1);
+
+    printf("\n");
+    printf("Average time for %s cc protocol: %f seconds.\n", cc1, evenavg);
+    printf("\n");
+    
+    printf("Time it took to receive each iteration of the 2nd half of the file (in %s cc protocol):\n", cc2);
+
+    ind = 1;
+    double oddsum = 0;
+
+    for(i = 1; i < 10; i+=2)
+    {
+        printf("Iteration %d: %f seconds.\n", ind, time[i]);
+        oddsum += time[i];
+        ind++;
+    }
+
+    double oddavg = oddsum / (ind-1);
+
+    printf("\n");
+    printf("Average time for %s cc protocol: %f seconds.\n", cc1, oddavg);
+    printf("\n");
 
     return 0;
 
