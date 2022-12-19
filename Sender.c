@@ -190,9 +190,6 @@ int main()
 
             counter = sendFile(fp, clientSock, size, counter, buffer);       // Sending the 2nd part of the file.
 
-            printf("counter = %d\n", counter);
-            printf("size = %d\n", size);
-
             if(counter != size)                                              
             {
                 printf("Error: File size didn't match, sending failed.\n");          // If the sending of the second part of the file failed,
