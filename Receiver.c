@@ -397,7 +397,7 @@ int main() {
     double oddavg = oddsum / (ind-1);
 
     printf("\n");
-    printf("Average time for %s cc protocol: %f seconds.\n", cc1, oddavg);
+    printf("Average time for %s cc protocol: %f seconds.\n", cc2, oddavg);
     printf("\n");
 
     return 0;
