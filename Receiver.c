@@ -90,10 +90,8 @@ int main() {
     // The **odd** indices will store the time it took to receive the second half (meaning in cc algorithm cubic).
 
     double time[buffer_size] = {0};    // An array to store the time it took to receive each half of the file.
-    struct timeval current_time;       // A struct to store the current time.
-    int current = 0;                   // The current index of the time array to fill in the next ammount of time for the file to be recieved.
-    double start = 0;                     // The start time of the file receiving.
-    double end = 0;                       // The end time of the file receiving.   
+    struct timeval start, end;         // A struct to store the current time.
+    int current = 0;                   // The current index of the time array to fill in the next ammount of time for the file to be recieved. 
     int flag = 1;                      // A flag used to help measure the time it took to receive a half of the file (usage better explained in the code below).
 
 
@@ -132,8 +130,7 @@ int main() {
         
             if(flag == 1)
             {
-                gettimeofday(&current_time, NULL);                                   // Getting the current time.
-                start = current_time.tv_sec + (current_time.tv_usec / 1000000.0);    // Converting the current time to seconds.
+                gettimeofday(&start, NULL);                                   // Getting the current time.
                 flag == 0;
             }
 
@@ -151,20 +148,18 @@ int main() {
 
             if ( (counter + temp == size/2 ) && strcmp(buffer, "SEND KEY") != 0)
             {
-                gettimeofday(&current_time, NULL);                                 // Getting the current time.
-                end = current_time.tv_sec + (current_time.tv_usec / 1000000.0);    // Converting the current time to seconds.
-                time[current] = end - start;                                       // Storing the time it took to receive the first half of the file.
-                current++;                                                         // Incrementing the current index of the time array.
-                flag = 1;                                                          // Setting the flag to 1 to indicate that the next half of the file is being received.
+                gettimeofday(&end, NULL);                                                                                        // Getting the current time.
+                time[current] =  end.tv_sec + (end.tv_usec / 1000000.0) - ( start.tv_sec + ( (start).tv_usec / 1000000.0) );     // Storing the time it took to receive the first half of the file.
+                current++;                                                                                                       // Incrementing the current index of the time array.
+                flag = 1;                                                                                                        // Setting the flag to 1 to indicate that the next half of the file is being received.
             }
 
             if ( (counter + temp == size ) && strcmp(buffer, "FIN") != 0)
             {     
-                gettimeofday(&current_time, NULL);                                 // Same actions as in the previous if statement.
-                end = current_time.tv_sec + (current_time.tv_usec / 1000000.0);    // Just about the second part of the file.
-                time[current] = end - start;                                      
-                current++;                                                         
-                flag = 1;                                                          
+                gettimeofday(&end, NULL);                                                                                        // Same as the previous if statement, 
+                time[current] =  end.tv_sec + (end.tv_usec / 1000000.0) - ( start.tv_sec + ( (start).tv_usec / 1000000.0) );     // but for the second half of the file.
+                current++;                                                                                                       
+                flag = 1;                                                                                                                                                                
             }
 
             // if temp == -1, then receiving failed with a general error.
@@ -369,7 +364,7 @@ int main() {
     double evensum = 0;
     int i;
 
-    for(i = 0; i < 10; i+=2)
+    for(i = 0; i < current; i+=2)
     {
         printf("Iteration %d: %f seconds.\n", ind, time[i]);
         evensum += time[i];
@@ -387,7 +382,7 @@ int main() {
     ind = 1;
     double oddsum = 0;
 
-    for(i = 1; i < 10; i+=2)
+    for(i = 1; i < current; i+=2)
     {
         printf("Iteration %d: %f seconds.\n", ind, time[i]);
         oddsum += time[i];
