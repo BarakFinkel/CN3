@@ -10,7 +10,7 @@
 #include <unistd.h>
 #include <netinet/tcp.h>
 
-#define server_port 5060
+#define server_port 5600
 #define server_ip "127.0.0.1"
 #define buffer_size 1024
 #define cc1 "reno"
@@ -89,8 +89,9 @@ int main() {
     // The **even** indices will store the time it took to receive the first half (meaning in cc algorithm reno).
     // The **odd** indices will store the time it took to receive the second half (meaning in cc algorithm cubic).
 
-    double time[buffer_size] = {0};    // An array to store the time it took to receive each half of the file.
+    double time[1000] = {0};           // An array to store the time it took to receive each half of the file.
     struct timeval start, end;         // A struct to store the current time.
+    long sec, micsec;                  // Variables that will hold the seconds and microseconds of the start and the end of the period of time receiving half of the file.
     int current = 0;                   // The current index of the time array to fill in the next ammount of time for the file to be recieved. 
     int flag = 1;                      // A flag used to help measure the time it took to receive a half of the file (usage better explained in the code below).
 
@@ -99,6 +100,7 @@ int main() {
     while(1)
     {
         // Initializing a pointer to the beginning of the file / creating a new file with the given name if it didn't exist beforehand.
+        // If we're at the beginning of sending the file or at half of the process of receiving the file.
 
         FILE *fp = fopen("recv.txt", "w"); 
         if (fp == NULL) 
@@ -127,18 +129,19 @@ int main() {
         while(1)
         {
             // Getting the current time and storing it in the variable 'start'.
-        
+            // 
+
             if(flag == 1)
             {
-                gettimeofday(&start, NULL);                                   // Getting the current time.
-                flag == 0;
+                gettimeofday(&start, NULL);                                       // Getting the current time.
+                printf("Set start!");
+                flag = 0;
             }
 
             // Receiving up to 1024 bytes of data from the server.
 
             temp = recv(sock, buffer, buffer_size, 0);    // Receiving data from the server.
 
-            
             // If the counter + num of bytes we received equals to size/2 or size, we have received half of the size of the file.
             
             // * There are 2 reasons for writing this part of the code here:
@@ -146,20 +149,26 @@ int main() {
             //   2) If we had a problem with receiving the file at any point in the code, we will not show any results,
             //      so it does not matter if we write this part of the code here. 
 
-            if ( (counter + temp == size/2 ) && strcmp(buffer, "SEND KEY") != 0)
+            if ( (counter + temp == size/2 ) && strcmp(buffer, "SEND KEY") != 0 )  
             {
-                gettimeofday(&end, NULL);                                                                                        // Getting the current time.
-                time[current] =  end.tv_sec + (end.tv_usec / 1000000.0) - ( start.tv_sec + ( (start).tv_usec / 1000000.0) );     // Storing the time it took to receive the first half of the file.
-                current++;                                                                                                       // Incrementing the current index of the time array.
-                flag = 1;                                                                                                        // Setting the flag to 1 to indicate that the next half of the file is being received.
+                gettimeofday(&end, NULL);                                        // Getting the current time.
+                printf("Set end!");
+                sec = end.tv_sec - start.tv_sec;                                 // Calculating the microseconds it took to receive the first half of the file.
+                micsec = end.tv_usec - start.tv_usec;
+                time[current] =  sec + micsec*(1e-6);                            // Storing the time it took to receive the first half of the file.
+                current++;                                                       // Incrementing the current index of the time array.
+                flag = 1;                                                        // Setting the flag to 1 to indicate that the next half of the file is being received.
             }
 
-            if ( (counter + temp == size ) && strcmp(buffer, "FIN") != 0)
+            if ( (counter + temp == size ) && strcmp(buffer, "FIN") != 0 )       // Doing the same as above, but for the second half of the file.
             {     
-                gettimeofday(&end, NULL);                                                                                        // Same as the previous if statement, 
-                time[current] =  end.tv_sec + (end.tv_usec / 1000000.0) - ( start.tv_sec + ( (start).tv_usec / 1000000.0) );     // but for the second half of the file.
-                current++;                                                                                                       
-                flag = 1;                                                                                                                                                                
+                gettimeofday(&end, NULL);   
+                printf("Set end!");  
+                sec = end.tv_sec - start.tv_sec;
+                micsec = end.tv_usec - start.tv_usec; 
+                time[current] =  sec + micsec*(1e-6); 
+                current++;                                                                              
+                flag = 1;                                                                                                                                                                                                                                            
             }
 
             // if temp == -1, then receiving failed with a general error.
@@ -350,11 +359,13 @@ int main() {
 
     }  
 
+    // Since the server is no longer interested in sending the file again, we now close the socket.
+
     close(sock);
     
     printf("Socket closed, goodbye!\n");
 
-    // Now we will print the time it took to receive each iteration of half of the file:
+    // Now we will print to the terminal the time of each cc algorithms and each of their iteration.
 
     printf("\n");
     printf("Time it took to receive each iteration of 1st half of the file (in %s cc protocol):\n", cc1);
@@ -411,6 +422,8 @@ int recvFileSize(int sock, char *buffer, char *ACK)
     
     int bytes = recv(sock, buffer, buffer_size, 0);
 
+    // Now we will check for errors that are printed to the receiver's terminal if occured.
+
     if (bytes == -1) 
     {
         printf("Error : Receive failed.\n");
@@ -432,6 +445,8 @@ int recvFileSize(int sock, char *buffer, char *ACK)
         return -1;                  // If sending the ACK failed, we'll return -1 to indicate that the function failed and exit main.
     } 
 
+    // We will now convert the string that holds the size of the file (in bytes) to a long and then to an int, and return it.
+
     char** end;
     long val = strtol(buffer, end, 10);
     int size = (int)val;
@@ -446,10 +461,14 @@ int recvFileSize(int sock, char *buffer, char *ACK)
 
 int sendKey(int sock, char *buffer)
 {
+    // We now calculate and send the key to the server.
+
     int key = 1714 ^ 6521;                                                    // Calculating the key.
     sprintf(buffer, "%d", key);                                               // Converting the key into the buffer.
 
     int sendResult = send(sock, buffer, (int)(strlen(buffer) + 1), 0);
+
+    // Now we will check for errors that are printed to the receiver's terminal if occured.
 
     if(sendResult == -1)
     {
@@ -469,7 +488,11 @@ int sendKey(int sock, char *buffer)
         return -1;
     } 
     
+    // We reset the bytes used in the buffer for later uses of it.
+
     bzero(buffer, (int)(strlen(buffer) + 1));
+
+    // If the keys match, we should receive an "OK" message, else - we end the program.
 
     int recvResult = recv(sock, buffer, 3, 0);
 
@@ -494,6 +517,8 @@ int sendKey(int sock, char *buffer)
         return -1;
     }
     
+    // We reset the bytes used in the buffer for later uses of it.
+
     bzero(buffer, (int)(strlen(buffer) + 1));
 
     return 0;
@@ -504,8 +529,12 @@ int sendKey(int sock, char *buffer)
 
 int sendACK(int sock, char *ACK)
 {
+    // We now send an "ACK" message to the sender.
+    
     int sendResult = send(sock, ACK, 4, 0);
     
+    // Now we will check for errors that are printed to the receiver's terminal if occured.
+
     if (sendResult == -1) 
     {
         printf("Error : Receive failed.\n");
@@ -562,7 +591,11 @@ int writeChunk(FILE *fp, int sock, int chunkSize, char *buffer, char *ACK)
 
 int sendEND(int sock, char *buffer)     
 {
+    // We send an "END" message to the server, and later expect to receive an "ACK".
+    
     int sendResult = send(sock, "END", 4, 0);
+    
+    // Now we will check for errors that are printed to the receiver's terminal if occured.
     
     if (sendResult == -1) 
     {
@@ -582,7 +615,11 @@ int sendEND(int sock, char *buffer)
         return -1;
     }
 
+    // We now wait for an "ACK" message.
+
     int recvResult = recv(sock, buffer, buffer_size, 0);
+
+    // Now we will check for errors that are printed to the receiver's terminal if occured.
 
     if(recvResult == -1)
     {
@@ -605,7 +642,7 @@ int sendEND(int sock, char *buffer)
         return -1;
     }
 
-    bzero(buffer, (int)(strlen(buffer) + 1));
+    bzero(buffer, (int)(strlen(buffer) + 1));  // Reset the buffer
 
     return 0;
 }
