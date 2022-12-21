@@ -10,7 +10,7 @@
 #include <unistd.h>
 #include <netinet/tcp.h>
 
-#define server_port 5600
+#define server_port 5060
 #define server_ip "127.0.0.1"
 #define buffer_size 1024
 #define cc1 "reno"
